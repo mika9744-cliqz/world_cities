@@ -30,17 +30,25 @@ def extract_cities_from_osm(area=10, types=["city", "town", "village"]):
 
 def extract_from_bbox(_type, mlon, mlat, Mlon, Mlat, _try=0):
     print "place_type=%s" % _type, "bbox=[%s,%s,%s,%s]" % (mlon, mlat, Mlon, Mlat)
-    data = OSMXAPI.call_api(_type, mlon, mlat, Mlon, Mlat)
-    if data["status"] == "FAILED" and _try <= 3:  # cut bbox into 4 parts
-        print "failed to extract, retry on smaller boxes ..."
-        av_lon, av_lat = (Mlon - mlon) / 2., (Mlat - mlat) / 2.
-        extract_from_bbox(_type, mlon, mlat, Mlon - av_lon, Mlat - av_lat, _try=_try + 1)
-        extract_from_bbox(_type, mlon, mlat + av_lat, Mlon - av_lon, Mlat, _try=_try + 1)
-        extract_from_bbox(_type, mlon + av_lon, mlat, Mlon, Mlat - av_lat, _try=_try + 1)
-        extract_from_bbox(_type, mlon + av_lon, mlat + av_lat, Mlon, Mlat, _try=_try + 1)
-    else:
-        filename = OSMXAPI.get_file_name(_type, mlon, mlat, Mlon, Mlat)
-        FileManager.write(filename, json.dumps(data))
+    filename = OSMXAPI.get_file_name(_type, mlon, mlat, Mlon, Mlat)
+    if not OSMXAPI.has_already_data(_type, mlon, mlat, Mlon, Mlat, _try=_try):
+        try:
+            data = OSMXAPI.call_api(_type, mlon, mlat, Mlon, Mlat)
+        except KeyboardInterrupt:
+            raise
+        except:
+            data = {'status': 'FAILED'}
+        if data["status"] == "FAILED" and _try <= OSMXAPI.MAX_TRY:  # cut bbox into 4 parts
+            print "failed to extract, retry on smaller boxes ..."
+            av_lon, av_lat = (Mlon - mlon) / 2., (Mlat - mlat) / 2.
+            extract_from_bbox(_type, mlon, mlat, Mlon - av_lon, Mlat - av_lat, _try=_try + 1)
+            extract_from_bbox(_type, mlon, mlat + av_lat, Mlon - av_lon, Mlat, _try=_try + 1)
+            extract_from_bbox(_type, mlon + av_lon, mlat, Mlon, Mlat - av_lat, _try=_try + 1)
+            extract_from_bbox(_type, mlon + av_lon, mlat + av_lat, Mlon, Mlat, _try=_try + 1)
+        elif _try > 3:
+            print "Max try exceeded: failed to extract data"
+        else:
+            FileManager.write(filename, json.dumps(data))
 
 
 if __name__ == "__main__":

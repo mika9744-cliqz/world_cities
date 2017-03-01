@@ -51,3 +51,7 @@ class FileManager(object):
         for (_, _, filenames) in os.walk(os.path.join(cls.FILES_FOLDER, directory)):
             return filenames
         return []
+
+    @classmethod
+    def exists(cls, filename):
+        return os.path.exists(os.path.join(cls.FILES_FOLDER, filename))

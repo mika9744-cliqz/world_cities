@@ -23,5 +23,6 @@ class StatsManager(object):
             for lang, name in city.iteritems():
                 if lang not in OSMXAPI.CSV_HEADER and name:
                     av_lang[-1] += 1
+        stats['countries'] = len(countries)
         stats["average_languages_per_city"] = sum(av_lang) / float(len(av_lang))
         return stats

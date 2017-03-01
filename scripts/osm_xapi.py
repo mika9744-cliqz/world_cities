@@ -13,6 +13,7 @@ class OSMXAPI(object):
     PLACE_TYPES = ["city", "town", "village"]
     WORLD_CITIES_FILE = "WORLD_CITIES.{format}.gz"
     CSV_HEADER = ["country_code", "name:en", "name", "lat", "lon", "population"]
+    MAX_TRY = 3
 
     @classmethod
     def call_api(cls, place_type, min_lon, min_lat, max_lon, max_lat):
@@ -69,11 +70,13 @@ class OSMXAPI(object):
         for place_type in cls.PLACE_TYPES:
             folder = os.path.join(cls.CITIES_FOLDER_NAME, place_type)
             for filename in FileManager.list_files(folder):
-                cities = FileManager.read(os.path.join(folder, filename), _format="json")['nodes']
-                if _format == "json":
-                    data.update(cls.to_json(cities))
-                elif _format == "csv":
-                    data = cls.to_csv(data, cities)
+                cities = FileManager.read(os.path.join(folder, filename), _format="json")
+                if cities['status'] == 'SUCCESS':
+                    cities = cities['nodes']
+                    if _format == "json":
+                        data.update(cls.to_json(cities))
+                    elif _format == "csv":
+                        data = cls.to_csv(data, cities)
         if _format == "csv":  # we complete the line with None. We don't have the name ine each language
             l = len(data[0])
             for line in data[1:]:
@@ -134,3 +137,19 @@ class OSMXAPI(object):
                 if name.lower() == country_name.lower():
                     return country_code
         return None
+
+    @classmethod
+    def has_already_data(cls, _type, mlon, mlat, Mlon, Mlat, _try=0):
+        if _try > cls.MAX_TRY:
+            return False
+        filename = cls.get_file_name(_type, mlon, mlat, Mlon, Mlat)
+        if FileManager.exists(filename):
+            return True
+        av_lon, av_lat = (Mlon - mlon) / 2., (Mlat - mlat) / 2.
+        return all([
+            cls.has_already_data(_type, mlon, mlat, Mlon - av_lon, Mlat - av_lat, _try=_try + 1),
+            cls.has_already_data(_type, mlon, mlat + av_lat, Mlon - av_lon, Mlat, _try=_try + 1),
+            cls.has_already_data(_type, mlon + av_lon, mlat, Mlon, Mlat - av_lat, _try=_try + 1),
+            cls.has_already_data(_type, mlon + av_lon, mlat + av_lat, Mlon, Mlat, _try=_try + 1)
+        ])
+
