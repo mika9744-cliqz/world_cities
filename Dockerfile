@@ -8,7 +8,7 @@ VOLUME ["/data"]
 
 ENV PYTHONUNBUFFERED=0
 
-RUN pip install docopt
+RUN pip install docopt babel
 
 WORKDIR /workspace
 

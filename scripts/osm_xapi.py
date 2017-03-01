@@ -3,6 +3,8 @@ import gzip
 import json
 import os
 import urllib2
+import csv
+from babel import core as bc
 from xml.dom import minidom
 
 
@@ -10,7 +12,7 @@ class OSMXAPI(object):
     URL = "http://overpass.osm.rambler.ru/cgi/xapi_meta"
     CITIES_FOLDER_NAME = "cities"
     PLACE_TYPES = ["city", "town", "village"]
-    WORLD_CITIES_FILE = "WORLD_CITIES_CLIQZ.json.gz"
+    WORLD_CITIES_FILE = "WORLD_CITIES.json.gz"
 
     @classmethod
     def call_api(cls, place_type, min_lon, min_lat, max_lon, max_lat):
@@ -31,12 +33,18 @@ class OSMXAPI(object):
             city = dict(lon=node.getAttribute('lon'), lat=node.getAttribute('lat'), names={})
             for tag in node.getElementsByTagName('tag'):
                 k_attr = tag.getAttribute('k')
-                if k_attr.startswith('name:'):
-                    country_code = k_attr.split(':')[-1]
-                    if country_code:
-                        city['names'][country_code] = tag.getAttribute('v')
-                if k_attr == "population":
+                if k_attr == "name":
+                    city["name"] = tag.getAttribute("v")
+                elif k_attr.startswith('name:'):
+                    lang_code = k_attr.split(':')[-1]
+                    if lang_code:
+                        city['names'][lang_code] = tag.getAttribute('v')
+                elif k_attr == "population":
                     city["population"] = tag.getAttribute("v")
+                elif k_attr == "is_in:country_code":
+                    city["country_code"] = tag.getAttribute("v")
+                elif k_attr == "is_in:country":
+                    city["country"] = tag.getAttribute("v")
             cities.append(city)
         return cities
 
@@ -48,36 +56,89 @@ class OSMXAPI(object):
         return os.path.join(cls.CITIES_FOLDER_NAME, place_type, filename)
 
     @classmethod
-    def merge_cities_file(cls):
+    def merge_cities_file(cls, _type="csv"):
         """
         Transform the file for the RH
 
+        :param _type: two possibilities:
+                - "csv": merge the extracted cities into a csv file
+                - "json": merge the extracted cities into a json file
         :return:
         """
-        data = {}
+        data = {} if _type == "json" else []
         for place_type in cls.PLACE_TYPES:
             folder = os.path.join(cls.CITIES_FOLDER_NAME, place_type)
             for filename in FileManager.list_files(folder):
                 cities = FileManager.read(os.path.join(folder, filename), _json=True)['nodes']
-                for city in cities:
-                    en_name = city['names'].get('en')
-                    if en_name:
-                        for lang, name in city['names'].iteritems():
-                            data.setdefault(lang, {})
-                            data[lang][en_name] = dict(
-                                name=name,
-                                lon=city['lon'],
-                                lat=city['lat'],
-                                population=city.get('population')
-                            )
-        FileManager.write(os.path.join(cls.CITIES_FOLDER_NAME, cls.WORLD_CITIES_FILE), data, _json=True)
+                if _type == "json":
+                    data.update(cls.to_json(cities))
+                elif _type == "csv":
+                    data = cls.to_csv(data, cities)
+        if _type == "csv":  # we complete the line with None. We don't have the name ine each language
+            l = len(data[0])
+            for line in data[1:]:
+                for i in range(len(line), l):
+                    line.append(None)
+        FileManager.write(os.path.join(cls.CITIES_FOLDER_NAME, cls.WORLD_CITIES_FILE), data, _type=_type)
+
+    @classmethod
+    def to_csv(cls, data, cities):
+        head = ["country_code", "name", "lat", "lon", "population"]
+        if len(data) == 0:
+            data.append([])
+        if len(data[0]) == 0:
+            data[0].extend(head)
+        for city in cities:
+            line = []
+            main_name = city.get('name')
+            if main_name:
+                country_code = city.get("country_code") or cls.get_country_code(city.get("country")) or "ZZ"
+                line.extend([country_code, main_name, city.get("lat"), city.get("lon"), city.get("population")])
+                for i in range(len(line), len(data[0])):
+                    line.append(None)
+                for lang, name in city["names"].iteritems():
+                    if lang in data[0]:
+                        ind = data[0].index(lang)
+                        line[ind] = name
+                    else:
+                        data[0].append(lang)
+                        line.append(name)
+            data.append(line)
+        return data
+
+    @classmethod
+    def to_json(cls, cities):
+        data = {}
+        for city in cities:
+            main_name = city.get('name')
+            if main_name:
+                country_code = city.get("country_code") or cls.get_country_code(city.get("country")) or "ZZ"
+                data.setdefault(country_code, {})
+                data[country_code][main_name] = dict(
+                    lon=city['lon'],
+                    lat=city['lat'],
+                    population=city.get('population')
+                )
+                for lang, name in city['names'].iteritems():
+                    data[country_code][main_name][lang] = name
+        return data
+
+    @classmethod
+    def get_country_code(cls, country_name):
+        if isinstance(country_name, str):
+            loc = bc.Locale("en", "US")
+            for country_code, name in loc.territories.iteritems():
+                if name.lower() == country_name.lower():
+                    return country_code
+        return None
 
 
 class FileManager(object):
     FILES_FOLDER = "/data"
+    CSV_DELIMITER = "|"
 
     @classmethod
-    def write(cls, filename, text, _json=False):
+    def write(cls, filename, text, _type=""):
         d = os.path.dirname(filename)
         # First create the directory
         if not os.path.exists(os.path.join(cls.FILES_FOLDER, d)):
@@ -85,7 +146,14 @@ class FileManager(object):
         # write into the given file
         o = gzip.open if filename.endswith(".gz") else open
         with o(os.path.join(cls.FILES_FOLDER, filename), "w") as f:
-            json.dump(text, f) if _json is True else f.write(text)
+            if _type == "json":
+                json.dump(text, f)
+            elif _type == "csv":
+                writer = csv.writer(f, delimiter=cls.CSV_DELIMITER)
+                for line in text:
+                    writer.writerow(map(lambda s: s.encode('utf-8') if isinstance(s, unicode) else s, line))
+            else:
+                f.write(text)
 
     @classmethod
     def read(cls, filename, _json=False):
@@ -97,6 +165,7 @@ class FileManager(object):
     def list_files(cls, directory):
         for (_, _, filenames) in os.walk(os.path.join(cls.FILES_FOLDER, directory)):
             return filenames
+        return []
 
 
 class StatsManager(object):
@@ -106,4 +175,3 @@ class StatsManager(object):
         data = FileManager.read(os.path.join(OSMXAPI.CITIES_FOLDER_NAME, OSMXAPI.WORLD_CITIES_FILE), _json=True)
         for lang, cities in data.iteritems():
             stats["countries"] += 1
-            stats["cities"]
