@@ -9,7 +9,7 @@ class FileManager(object):
     CSV_DELIMITER = "|"
 
     @classmethod
-    def write(cls, filename, text, _type=""):
+    def write(cls, filename, text, _format=""):
         d = os.path.dirname(filename)
         # First create the directory
         if not os.path.exists(os.path.join(cls.FILES_FOLDER, d)):
@@ -17,9 +17,9 @@ class FileManager(object):
         # write into the given file
         o = gzip.open if filename.endswith(".gz") else open
         with o(os.path.join(cls.FILES_FOLDER, filename), "w") as f:
-            if _type == "json":
+            if _format == "json":
                 json.dump(text, f)
-            elif _type == "csv":
+            elif _format == "csv":
                 writer = csv.writer(f, delimiter=cls.CSV_DELIMITER)
                 for line in text:
                     writer.writerow(map(lambda s: s.encode('utf-8') if isinstance(s, unicode) else s, line))
@@ -27,10 +27,24 @@ class FileManager(object):
                 f.write(text)
 
     @classmethod
-    def read(cls, filename, _json=False):
+    def read(cls, filename, _format=""):
         o = gzip.open if filename.endswith(".gz") else open
         with o(os.path.join(cls.FILES_FOLDER, filename), "r") as f:
-            return json.load(f) if _json is True else f.read()
+            if _format == "json":
+                return json.load(f)
+            elif _format == "csv":
+                dict_reader = csv.DictReader(f, delimiter=cls.CSV_DELIMITER)
+                cities = []
+                first = True
+                for row in dict_reader:
+                    if first:
+                        first = False
+                        continue
+                    city = {k: v for k, v in row.iteritems() if v}
+                    cities.append(city)
+                return cities
+            else:
+                return f.read()
 
     @classmethod
     def list_files(cls, directory):

@@ -11,7 +11,8 @@ class OSMXAPI(object):
     URL = "http://overpass.osm.rambler.ru/cgi/xapi_meta"
     CITIES_FOLDER_NAME = "cities"
     PLACE_TYPES = ["city", "town", "village"]
-    WORLD_CITIES_FILE = "WORLD_CITIES.json.gz"
+    WORLD_CITIES_FILE = "WORLD_CITIES.{format}.gz"
+    CSV_HEADER = ["country_code", "name:en", "name", "lat", "lon", "population"]
 
     @classmethod
     def call_api(cls, place_type, min_lon, min_lat, max_lon, max_lat):
@@ -55,44 +56,47 @@ class OSMXAPI(object):
         return os.path.join(cls.CITIES_FOLDER_NAME, place_type, filename)
 
     @classmethod
-    def merge_cities_file(cls, _type="csv"):
+    def merge_cities_file(cls, _format="csv"):
         """
         Transform the file for the RH
 
-        :param _type: two possibilities:
+        :param _format: two possibilities:
                 - "csv": merge the extracted cities into a csv file
                 - "json": merge the extracted cities into a json file
         :return:
         """
-        data = {} if _type == "json" else []
+        data = {} if _format == "json" else []
         for place_type in cls.PLACE_TYPES:
             folder = os.path.join(cls.CITIES_FOLDER_NAME, place_type)
             for filename in FileManager.list_files(folder):
-                cities = FileManager.read(os.path.join(folder, filename), _json=True)['nodes']
-                if _type == "json":
+                cities = FileManager.read(os.path.join(folder, filename), _format="json")['nodes']
+                if _format == "json":
                     data.update(cls.to_json(cities))
-                elif _type == "csv":
+                elif _format == "csv":
                     data = cls.to_csv(data, cities)
-        if _type == "csv":  # we complete the line with None. We don't have the name ine each language
+        if _format == "csv":  # we complete the line with None. We don't have the name ine each language
             l = len(data[0])
             for line in data[1:]:
                 for i in range(len(line), l):
                     line.append(None)
-        FileManager.write(os.path.join(cls.CITIES_FOLDER_NAME, cls.WORLD_CITIES_FILE), data, _type=_type)
+        FileManager.write(os.path.join(cls.CITIES_FOLDER_NAME, cls.WORLD_CITIES_FILE.format(format=_format)),
+                          data, _format=_format)
 
     @classmethod
     def to_csv(cls, data, cities):
-        head = ["country_code", "name", "lat", "lon", "population"]
         if len(data) == 0:
             data.append([])
         if len(data[0]) == 0:
-            data[0].extend(head)
+            data[0].extend(cls.CSV_HEADER)
         for city in cities:
             line = []
             main_name = city.get('name')
+            en_name = city['names'].get('en')
+            if not main_name:
+                main_name = en_name or city['names'].values()[0] if len(city['names']) > 0 else None
             if main_name:
                 country_code = city.get("country_code") or cls.get_country_code(city.get("country")) or "ZZ"
-                line.extend([country_code, main_name, city.get("lat"), city.get("lon"), city.get("population")])
+                line.extend([country_code, en_name, main_name, city.get("lat"), city.get("lon"), city.get("population")])
                 for i in range(len(line), len(data[0])):
                     line.append(None)
                 for lang, name in city["names"].iteritems():
@@ -102,7 +106,7 @@ class OSMXAPI(object):
                     else:
                         data[0].append(lang)
                         line.append(name)
-            data.append(line)
+                data.append(line)
         return data
 
     @classmethod
