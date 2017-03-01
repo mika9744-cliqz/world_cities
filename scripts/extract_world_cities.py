@@ -7,13 +7,14 @@ help = """About script.
 
 Usage:
   extract_world_cities.py extract [--area=AREA --type=TYPE --merge]
-  extract_world_cities.py merge
+  extract_world_cities.py merge [--output-format=OUT]
 
 Options:
   -h --help
   -a --area=AREA  box sizes for api call [default: 10]
   -t --type=TYPE  which kind of place we extract [default: city,town,village]
   -m --merge  if set we merge the collected cities in one file
+  -o --output-format  the format of the output merged file [default: csv]
 """
 
 
@@ -39,9 +40,9 @@ def extract_from_bbox(_type, mlon, mlat, Mlon, Mlat, _try=0):
         FileManager.write(filename, json.dumps(data))
 
 
-def merge_cities_files():
+def merge_cities_files(_type="csv"):
     print "merging cities files"
-    OSMXAPI.merge_cities_file()
+    OSMXAPI.merge_cities_file(_type=_type)
 
 
 if __name__ == "__main__":
@@ -53,5 +54,6 @@ if __name__ == "__main__":
         if arguments["--merge"] is True:
             merge_cities_files()
     elif arguments["merge"] is True:
-        merge_cities_files()
+        _type = arguments["--output-format"]
+        merge_cities_files(_type=_type)
 
