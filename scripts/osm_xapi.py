@@ -22,7 +22,7 @@ class OSMXAPI(object):
     @classmethod
     def read_xml(cls, xml):
         dom = minidom.parseString(xml)
-        return len(dom.getElementsByTagName("remark")), cls.extract_nodes(dom.getElementsByTagName('node'))
+        return len(dom.getElementsByTagName("remark")) == 0, cls.extract_nodes(dom.getElementsByTagName('node'))
 
     @classmethod
     def extract_nodes(cls, nodes):

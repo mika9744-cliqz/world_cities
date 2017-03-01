@@ -28,7 +28,7 @@ def extract_from_bbox(_type, mlon, mlat, Mlon, Mlat, _try=0):
     print "place_type=%s" % _type, "bbox=[%s,%s,%s,%s]" % (mlon, mlat, Mlon, Mlat)
     data = OSMXAPI.call_api(_type, mlon, mlat, Mlon, Mlat)
     if data["status"] == "FAILED" and _try <= 3:  # cut bbox into 4 parts
-        "failed to extract, retry on smaller boxes ..."
+        print "failed to extract, retry on smaller boxes ..."
         av_lon, av_lat = (Mlon - mlon) / 2., (Mlat - mlat) / 2.
         extract_from_bbox(_type, mlon, mlat, Mlon - av_lon, Mlat - av_lat, _try=_try + 1)
         extract_from_bbox(_type, mlon, mlat + av_lat, Mlon - av_lon, Mlat, _try=_try + 1)
