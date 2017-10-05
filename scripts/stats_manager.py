@@ -42,10 +42,9 @@ class StatsManager(object):
         for city in data:
             stats["cities"] += 1
             av_lang.append(0)
-            if city["country_code"] != 'ZZ':
-                countries.add(city["country_code"])
-                stats['cities_per_country'].setdefault(city['country_code'], 0)
-                stats['cities_per_country'][city['country_code']] += 1
+            countries.add(city["country_code"])
+            stats['cities_per_country'].setdefault(city['country_code'], 0)
+            stats['cities_per_country'][city['country_code']] += 1
             for lang in options.SUPPORTED_LANGUAGES:
                 if city.get("name:%s" % lang):
                     av_lang[-1] += 1
