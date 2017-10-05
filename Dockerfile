@@ -7,8 +7,9 @@ LABEL version="0.1"
 VOLUME ["/data"]
 
 ENV PYTHONUNBUFFERED=0
+ENV API_NAME="wiki_data"
 
-RUN pip install docopt babel
+RUN pip install docopt babel requests
 
 WORKDIR /workspace
 
