@@ -3,6 +3,8 @@ import os
 from collections import defaultdict
 
 import requests
+from requests import ConnectionError, ReadTimeout
+from babel import core as bc
 
 from file_manager import FileManager
 
@@ -11,16 +13,28 @@ class WikiDataAPI(object):
     endpoint = "https://query.wikidata.org/sparql"
     CITIES_FOLDER_NAME = "wiki_data/cities"
     SUPPORTED_LANGUAGES = ["de", "en", "fr"]
-    CSV_HEADER = ["country_code"] + ["name:%s" % lang for lang in SUPPORTED_LANGUAGES]
+    CSV_HEADER = ["country_code", "city_name", "city_name_acsii", "lon", "lat", "population"] + ["name:%s" % lang for lang in SUPPORTED_LANGUAGES]
     WORLD_CITIES_FILE = "WORLD_CITIES.{format}.gz"
 
     @classmethod
-    def request_api(cls, query):
+    def make_query(cls, country_code, lang):
+        return 'SELECT ?city ?cityLabel ?country ?countryLabel ?coordinate_location ?population ' \
+               'WHERE {?city (wdt:P31/wdt:P279*) wd:Q515.?city wdt:P17 ?country.?city wdt:P17 wd:%s. ' \
+               'SERVICE wikibase:label { bd:serviceParam wikibase:language "%s". } ' \
+               'OPTIONAL { ?city wdt:P625 ?coordinate_location. } OPTIONAL { ?city wdt:P1082 ?population. }}' \
+               % (country_code, lang)
+
+    @classmethod
+    def request_api(cls, query, retry=3):
+        if retry < 0:
+            return {}
         params = dict(format="json", query=query)
         try:
             res = requests.get(cls.endpoint, params=params, timeout=5).json()
-        except:
+        except ConnectionError:
             res = {}
+        except ReadTimeout:
+            res = cls.request_api(query, retry=retry - 1)
         return res
 
     @classmethod
@@ -34,6 +48,8 @@ class WikiDataAPI(object):
                 "cityLabel": city_label,
                 "country": city["country"]["value"].split("/")[-1],
                 "countryLabel": city["countryLabel"]["value"],
+                "population": city.get("population", {}).get("value", ""),
+                "coordinate_location": city.get("coordinate_location", {}).get("value", "")
             })
         return res
 
@@ -43,12 +59,6 @@ class WikiDataAPI(object):
         if response:
             return cls.format_response(response)
         return []
-
-    @classmethod
-    def make_query(cls, country, lang):
-        return 'SELECT ?city ?cityLabel ?country ?countryLabel WHERE { ?city (wdt:P31/wdt:P279*) wd:Q515. ?' \
-               'city wdt:P17 ?country. SERVICE wikibase:label { bd:serviceParam wikibase:language "%s". } ?' \
-               'city wdt:P17 wd:%s.}' % (lang, country)
 
     @classmethod
     def get_file_name(cls, country, lang, gz=True):
@@ -67,11 +77,22 @@ class WikiDataAPI(object):
         }
 
     @classmethod
+    def extract_location(cls, location):
+        if not location:
+            return "", ""
+        return location[6:-1].split()
+
+    @classmethod
     def to_csv(cls, data, cities, country_code):
         if len(data) == 0:
             data.append(cls.CSV_HEADER)
         for city in cities:
-            data.append([country_code, city.get("name:de", ""), city.get("name:en", ""), city.get("name:fr", "")])
+            lon, lat = cls.extract_location(city["coordinate_location"])
+            city_name = city.get("name:en") or city.get("name:de") or city.get("name:fr", "")
+            data.append(
+                [country_code, city_name, "", lon, lat, city["population"],
+                 city.get("name:de", ""), city.get("name:en", ""), city.get("name:fr", "")]
+            )
         return data
 
     @classmethod
@@ -83,12 +104,21 @@ class WikiDataAPI(object):
     @classmethod
     def merge_cities_file(cls, _format="csv"):
         res = []
-        for country_code in cls.request_country_codes().iterkeys():
+        codes = {country: code for code, country in bc.Locale("en", "US").territories.iteritems()}
+        for country in cls.request_country_codes().iterkeys():
             cities = defaultdict(dict)
+            if country == "United States of America":
+                short_country = "United States"
+            elif country == "People's Republic of China":
+                short_country = "China"
+            else:
+                short_country = country
+            country_code = codes.get(short_country, "ZZ")
             for lang in cls.SUPPORTED_LANGUAGES:
-                filename = cls.get_file_name(country_code, lang)
-                for element in FileManager.read(filename, _format="json"):
-                    cities[element["city"]]['name:%s' % lang] = element["cityLabel"]
+                filename = cls.get_file_name(country, lang)
+                if FileManager.exists(filename):
+                    for element in FileManager.read(filename, _format="json"):
+                        cities[element["city"]]['name:%s' % lang] = element["cityLabel"]
             if _format == "json":
                 res = cls.to_json(res, cities.itervalues(), country_code)
             elif _format == "csv":
