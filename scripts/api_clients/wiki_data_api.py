@@ -80,8 +80,12 @@ class WikiDataAPI(object):
     def extract_location(cls, location):
         if not location:
             return "", ""
-        return location[6:-1].split()
-
+        try:
+            lon, lat = location[6:-1].split()
+            return float(lon), float(lat)
+        except ValueError:
+            return "", ""
+       
     @classmethod
     def to_csv(cls, data, cities, country_code):
         if len(data) == 0:
@@ -118,6 +122,7 @@ class WikiDataAPI(object):
                 filename = cls.get_file_name(country, lang)
                 if FileManager.exists(filename):
                     for element in FileManager.read(filename, _format="json"):
+                        cities[element["city"]].update(element)
                         cities[element["city"]]['name:%s' % lang] = element["cityLabel"]
             if _format == "json":
                 res = cls.to_json(res, cities.itervalues(), country_code)
