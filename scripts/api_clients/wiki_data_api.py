@@ -85,7 +85,7 @@ class WikiDataAPI(object):
             return float(lon), float(lat)
         except ValueError:
             return "", ""
-
+       
     @classmethod
     def to_csv(cls, data, cities, country_code):
         if len(data) == 0:
