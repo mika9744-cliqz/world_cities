@@ -1,15 +1,16 @@
 import datetime
 import os
 import urllib2
-from babel import core as bc
 from xml.dom import minidom
+
+from babel import core as bc
 
 from file_manager import FileManager
 
 
 class OSMXAPI(object):
     URL = "http://overpass.osm.rambler.ru/cgi/xapi_meta"
-    CITIES_FOLDER_NAME = "cities"
+    CITIES_FOLDER_NAME = "osm_xapi/cities"
     PLACE_TYPES = ["city", "town", "village"]
     WORLD_CITIES_FILE = "WORLD_CITIES.{format}.gz"
     CSV_HEADER = ["country_code", "name:en", "name", "lat", "lon", "population"]
