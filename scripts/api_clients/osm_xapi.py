@@ -1,4 +1,3 @@
-import datetime
 import os
 import urllib2
 from xml.dom import minidom
@@ -52,8 +51,7 @@ class OSMXAPI(object):
 
     @classmethod
     def get_file_name(cls, place_type, min_lon, min_lat, max_lon, max_lat, gz=True):
-        now = datetime.datetime.now().strftime("%Y%m%d")
-        filename = "%s_%s.json" % (now, '_'.join(map(str, [min_lat, min_lon, max_lat, max_lon])))
+        filename = "%s_%s.json" % (place_type, '_'.join(map(str, [min_lat, min_lon, max_lat, max_lon])))
         filename = filename + ".gz" if gz else filename
         return os.path.join(cls.CITIES_FOLDER_NAME, place_type, filename)
 
